@@ -1,5 +1,5 @@
 # Empty Track Creator
-A simple tool for a simple job
+A simple tool for a simple job. GUI program source code found [here](https://github.com/6gh/Empty-Track-Creator-GUI)
 
 ## Purpose
 
@@ -24,3 +24,7 @@ You can also do `.\empty-track-creator-cli.exe -h` for a list of flags you can a
 To use the GUI, simply run the exe and choose your options. Then click "Create" to run the CLI and get the output in the Output box.
 
 The GUI is very simple for the sole reason that it is just for people who might not like the CLI route and want something more user-friendly.
+
+## License
+
+[MIT](https://github.com/6gh/Empty-Track-Creator/blob/master/LICENSE)
