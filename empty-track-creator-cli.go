@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"time"
 
 	"gitlab.com/gomidi/midi/gm"
 	"gitlab.com/gomidi/midi/v2"
@@ -19,25 +20,56 @@ func main() {
 	ppq := flag.Int("ppq", 960, "Pulses per quarter note")
 	bpm := flag.Int("bpm", 138, "BPM. The number of beats per minute")
 	allowDrums := flag.Bool("drums", false, "If not present, does not add drum channels (ch 10)")
+	inputPath := flag.String("input", "", "Input MIDI file path. If present, will read from this file instead of generating a new one")
+	benchmark := flag.Bool("benchmark", false, "If present, will also run a timer to see how long it took")
 
 	flag.Parse()
 
+	var newMidi bool
+	if *inputPath == "" {
+		newMidi = true
+	} else {
+		newMidi = false
+	}
+
 	log.Println("creating midi file at: ", *midiPath)
-	log.Println("melody tracks: ", *melodyTracks, "| art tracks: ", *artTracks, "| ppq: ", *ppq, "| bpm: ", *bpm, "| allow drums: ", *allowDrums)
+	if newMidi {
+		log.Println("melody tracks: ", *melodyTracks, "| art tracks: ", *artTracks, "| ppq: ", *ppq, "| bpm: ", *bpm, "| allow drums: ", *allowDrums)
+	} else {
+		log.Println("using bpm+ppq from input file", "| melody tracks: ", *melodyTracks, "| art tracks: ", *artTracks, "| allow drums: ", *allowDrums)
+	}
 
 	var (
 		buffer     bytes.Buffer
 		resolution = smf.MetricTicks(*ppq)
 		firstTrack smf.Track
-		midiData   = smf.New()
+		midiData   *smf.SMF
+		start      time.Time
 	)
 
-	midiData.TimeFormat = resolution
+	if *benchmark {
+		log.Println("benchmark enabled, starting timer now")
+		start = time.Now()
+	}
 
-	firstTrack.Add(0, smf.MetaTrackSequenceName(""))
-	firstTrack.Add(0, smf.MetaTempo(float64(*bpm)))
-	firstTrack.Close(0)
-	midiData.Add(firstTrack)
+	if *inputPath != "" {
+		var err error
+
+		log.Println("reading from input file: ", *inputPath)
+		midiData, err = smf.ReadFile(*inputPath)
+		handleErr(err)
+	} else {
+		midiData = smf.New()
+	}
+
+	if newMidi {
+		midiData.TimeFormat = resolution
+
+		firstTrack.Add(0, smf.MetaTrackSequenceName(""))
+		firstTrack.Add(0, smf.MetaTempo(float64(*bpm)))
+		firstTrack.Close(0)
+		midiData.Add(firstTrack)
+	}
 
 	for i := 0; i < *melodyTracks; i++ {
 		var track smf.Track
@@ -78,7 +110,12 @@ func main() {
 	err = file.Close()
 	handleErr(err)
 
-	log.Println("finished")
+	if *benchmark {
+		elapsed := time.Since(start)
+		log.Printf("finished | took %s", elapsed)
+	} else {
+		log.Println("finished")
+	}
 }
 
 func handleErr(err error) {
