@@ -1,5 +1,5 @@
 # Empty Track Creator
-A simple tool for a simple job. GUI program source code found [here](https://github.com/6gh/Empty-Track-Creator-GUI)
+A simple tool for a simple job.
 
 ## Purpose
 
@@ -9,21 +9,11 @@ Melody tracks meaning tracks in which you would put your musical components in (
 
 ## Usage
 
-Download the [latest release](https://github.com/6gh/Empty-Track-Creator/releases/latest) **CLI** exe. The CLI exe is necessary as the GUI exe simply runs the CLI with your options. GUI is optional.
+Download the [latest release](https://github.com/6gh/Empty-Track-Creator/releases/latest). Currently, the only built release is for windows. This is due to me not having a Linux or Mac machine, so I am not able to verify that it works on these OSes.
 
-### Using the CLI
+## Building 
 
-Basic usage includes `./empty-track-creator-cli.exe -melody <number> -art <number>`, which creates an output.mid with the tracks you specified
-
-You can also do `.\empty-track-creator-cli.exe -h` for a list of flags you can also use.
-
-### Using the GUI
-
-> If you want to use the GUI, you must have the CLI exe present in the same directory, and the CLI must be called `empty-track-creator-cli.exe`
-
-To use the GUI, simply run the exe and choose your options. Then click "Create" to run the CLI and get the output in the Output box.
-
-The GUI is very simple for the sole reason that it is just for people who might not like the CLI route and want something more user-friendly.
+You will need to install the packages required using Go and also follow [Fyne getting started guide](https://developer.fyne.io/started/) to install and use fyne (gui framework). After that just use `fyne package` and you will get your executable.
 
 ## License
 
