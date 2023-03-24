@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"os"
 	"time"
 
@@ -10,40 +9,39 @@ import (
 	"gitlab.com/gomidi/midi/v2/smf"
 )
 
-func createTracks(melodyTracks int, artTracks int, midiPath string, ppq int, bpm int, allowDrums bool, inputPath string, benchmark bool, logger func(format string, a ...any), callback func()) {
+func createTracks(options Info) {
+	log := options.logger
 	var newMidi bool
-	if inputPath == "" {
+	if options.inputPath == "" {
 		newMidi = true
 	} else {
 		newMidi = false
 	}
 
-	logger("creating midi file at: %v", midiPath)
+	log("Creating midi file at: %v", options.midiPath)
 	if newMidi {
-		logger("melody tracks: %v | art tracks: %v | ppq: %v | bpm: %v | allow drums: %v", melodyTracks, artTracks, ppq, bpm, allowDrums)
+		log("melody tracks: %v | art tracks: %v | ppq: %v | bpm: %v | allow drums: %v", options.melodyTracks, options.artTracks, options.ppq, options.bpm, options.allowDrums)
 	} else {
-		logger("using bpm+ppq from input file | melody tracks: %v | art tracks: %v | allow drums: %v", melodyTracks, artTracks, allowDrums)
-
+		log("using bpm+ppq from input file | melody tracks: %v | art tracks: %v | allow drums: %v", options.melodyTracks, options.artTracks, options.allowDrums)
 	}
 
 	var (
-		buffer     bytes.Buffer
-		resolution = smf.MetricTicks(ppq)
+		resolution = smf.MetricTicks(options.ppq)
 		firstTrack smf.Track
 		midiData   *smf.SMF
 		start      time.Time
 	)
 
-	if benchmark {
-		logger("benchmark enabled, starting timer now")
+	if options.benchmark {
+		log("benchmark enabled, starting timer now")
 		start = time.Now()
 	}
 
-	if inputPath != "" {
+	if options.inputPath != "" {
 		var err error
 
-		logger("reading from input file: %v", inputPath)
-		midiData, err = smf.ReadFile(inputPath)
+		log("reading from input file: %v", options.inputPath)
+		midiData, err = smf.ReadFile(options.inputPath)
 		handleErr(err)
 	} else {
 		midiData = smf.New()
@@ -53,20 +51,20 @@ func createTracks(melodyTracks int, artTracks int, midiPath string, ppq int, bpm
 		midiData.TimeFormat = resolution
 
 		firstTrack.Add(0, smf.MetaTrackSequenceName(""))
-		firstTrack.Add(0, smf.MetaTempo(float64(bpm)))
+		firstTrack.Add(0, smf.MetaTempo(float64(options.bpm)))
 		firstTrack.Close(0)
 		midiData.Add(firstTrack)
 	}
 
-	for i := 0; i < melodyTracks; i++ {
+	for i := 0; i < options.melodyTracks; i++ {
 		var track smf.Track
 
 		j := i % 15
-		if !allowDrums && j == 9 {
-			melodyTracks = melodyTracks + 1
+		if !options.allowDrums && j == 9 {
+			options.melodyTracks = options.melodyTracks + 1
 			continue
 		} else {
-			logger("adding melody track %v on channel %v", i, j+1)
+			log("[M-%v] adding melody track on channel %v", i+1, j+1)
 			if j == 9 {
 				track.Add(0, smf.MetaTrackSequenceName("Rhythm"))
 			}
@@ -77,32 +75,44 @@ func createTracks(melodyTracks int, artTracks int, midiPath string, ppq int, bpm
 		}
 	}
 
-	for i := 0; i < artTracks; i++ {
+	for i := 0; i < options.artTracks; i++ {
 		var track smf.Track
 
-		logger("adding art track")
+		log("[A-%v] adding art track", i+1)
 		track.Add(0, midi.ProgramChange(15, gm.Instr_AcousticGrandPiano.Value()))
 		track.Close(0)
 		err := midiData.Add(track)
 		handleErr(err)
 	}
 
-	_, err := midiData.WriteTo(&buffer)
+	file, err := os.OpenFile(options.midiPath, os.O_CREATE|os.O_WRONLY, 0644)
 	handleErr(err)
 
-	file, err := os.OpenFile(midiPath, os.O_CREATE|os.O_WRONLY, 0644)
+	_, err = midiData.WriteTo(file)
 	handleErr(err)
-
-	buffer.WriteTo(file)
 	err = file.Close()
 	handleErr(err)
 
-	if benchmark {
+	if options.benchmark {
 		elapsed := time.Since(start)
-		logger("finished | took %s", elapsed)
+		log("finished | took %s", elapsed)
 	} else {
-		logger("finished")
+		log("finished")
 	}
 
+	callback := options.callback
 	callback()
+}
+
+type Info struct {
+	melodyTracks int
+	artTracks    int
+	midiPath     string
+	ppq          int
+	bpm          int
+	allowDrums   bool
+	inputPath    string
+	benchmark    bool
+	logger       func(format string, a ...any)
+	callback     func()
 }

@@ -31,7 +31,7 @@ func createGUI() {
 
 	// for development purposes
 	// uncomment when building
-	window.SetIcon(theme.FyneLogo())
+	// window.SetIcon(theme.FyneLogo())
 
 	helpBar := widget.NewToolbar(
 		widget.NewToolbarAction(theme.HelpIcon(), func() {
@@ -194,28 +194,30 @@ func createGUI() {
 			window.SetTitle("Empty Track Creator (Running...)")
 
 			createTracks(
-				melody,
-				art,
-				OutputTXT.Text,
-				pqq,
-				bpm,
-				DrumsChk.Checked,
-				InputTXT.Text,
-				a.Preferences().BoolWithFallback("timer", false),
-				func(format string, a ...any) {
-					OutputBox.SetText(OutputBox.Text + fmt.Sprintf(format, a...) + "\n")
-				},
-				func() {
-					MelodyTrackTXT.Enable()
-					ArtTrackTXT.Enable()
-					OutputTXT.Enable()
-					PPQTXT.Enable()
-					BPMTXT.Enable()
-					DrumsChk.Enable()
-					InputTXT.Enable()
-					inputButton.Enable()
-					outputButton.Enable()
-					window.SetTitle("Empty Track Creator")
+				Info{
+					melodyTracks: melody,
+					artTracks:    art,
+					midiPath:     OutputTXT.Text,
+					ppq:          pqq,
+					bpm:          bpm,
+					allowDrums:   DrumsChk.Checked,
+					inputPath:    InputTXT.Text,
+					benchmark:    a.Preferences().BoolWithFallback("timer", false),
+					logger: func(format string, a ...any) {
+						OutputBox.SetText(OutputBox.Text + fmt.Sprintf(format, a...) + "\n")
+					},
+					callback: func() {
+						MelodyTrackTXT.Enable()
+						ArtTrackTXT.Enable()
+						OutputTXT.Enable()
+						PPQTXT.Enable()
+						BPMTXT.Enable()
+						DrumsChk.Enable()
+						InputTXT.Enable()
+						inputButton.Enable()
+						outputButton.Enable()
+						window.SetTitle("Empty Track Creator")
+					},
 				},
 			)
 		}
