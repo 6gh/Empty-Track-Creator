@@ -46,7 +46,7 @@ func createGUI() {
 			title.Alignment = fyne.TextAlignCenter
 			title.TextSize = 24
 
-			version := canvas.NewText("v1.2.0", color.White)
+			version := canvas.NewText(fyne.CurrentApp().Metadata().Version, color.White)
 			version.Alignment = fyne.TextAlignCenter
 			version.TextSize = 16
 
