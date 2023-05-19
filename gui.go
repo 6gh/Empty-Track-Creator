@@ -130,6 +130,11 @@ func createGUI() {
 			handleErr(err)
 		}
 
+		// append .mid if not present
+		if !strings.HasSuffix(filePath, ".mid") {
+			filePath += ".mid"
+		}
+
 		logf("Output path selected: %s", filePath)
 		OutputTXT.SetText(filePath)
 	})
