@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"image/color"
 	"net/url"
+	"os"
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -15,9 +17,10 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
-	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+
+	sqdialog "github.com/sqweek/dialog"
 )
 
 func createGUI() {
@@ -35,6 +38,8 @@ func createGUI() {
 
 	helpBar := widget.NewToolbar(
 		widget.NewToolbarAction(theme.HelpIcon(), func() {
+			logf("Opening help dialog")
+
 			icon := canvas.NewImageFromResource(window.Icon())
 			icon.SetMinSize(fyne.NewSize(128, 128))
 			icon.FillMode = canvas.ImageFillContain
@@ -69,6 +74,8 @@ func createGUI() {
 			dialog.ShowCustom("About", "Close", vBox, window)
 		}),
 		widget.NewToolbarAction(theme.SettingsIcon(), func() {
+			logf("Opening settings dialog")
+
 			title := canvas.NewText("Additional Settings", color.White)
 			title.TextStyle = fyne.TextStyle{
 				Bold: true,
@@ -93,14 +100,6 @@ func createGUI() {
 	PPQLbl := createTxt("PPQ:")
 	BPMLbl := createTxt("BPM:")
 
-	// create all inputs
-	InputTXT := widget.NewEntry()
-	InputTXT.Validator = func(s string) error {
-		if s != "" && path.Ext(s) != ".mid" {
-			return errors.New("file must be a .mid file")
-		}
-		return nil
-	}
 	OutputTXT := widget.NewEntry()
 	OutputTXT.Validator = func(s string) error {
 		if s == "" {
@@ -120,56 +119,50 @@ func createGUI() {
 	OutputBox := widget.NewMultiLineEntry()
 	OutputBox.SetText("Output will go here...")
 
-	inputButton := widget.NewButtonWithIcon("Input Path", theme.FileIcon(), func() {
-		fileDialog := dialog.NewFileOpen(func(reader fyne.URIReadCloser, _ error) {
-			if reader != nil {
-				InputTXT.SetText(reader.URI().Path())
-			}
-		}, window)
-
-		fileDialog.SetFilter(storage.NewExtensionFileFilter([]string{".mid"}))
-		fileDialog.Show()
-	})
 	outputButton := widget.NewButtonWithIcon("Output Path", theme.FileIcon(), func() {
-		fileDialog := dialog.NewFileSave(func(reader fyne.URIWriteCloser, _ error) {
-			if reader != nil {
-				p := reader.URI().Path()
+		logf("Opening output path dialog")
 
-				if path.Ext(p) != ".mid" {
-					p += ".mid"
-				}
-				OutputTXT.SetText(p)
-			}
-		}, window)
+		filePath, err := sqdialog.File().Filter("MIDI Files (.mid)", "mid").Title("Select Output Path").Save()
+		if errors.Is(err, sqdialog.ErrCancelled) {
+			logf("User cancelled output path dialog")
+			return // user cancelled
+		} else {
+			handleErr(err)
+		}
 
-		fileDialog.SetFilter(storage.NewExtensionFileFilter([]string{".mid"}))
-		fileDialog.Show()
+		logf("Output path selected: %s", filePath)
+		OutputTXT.SetText(filePath)
 	})
 
 	createButton := widget.NewButton("Create", func() {
-		var errors []string
-		if err := InputTXT.Validate(); err != nil {
-			errors = append(errors, "input: "+err.Error())
-		}
+		var errs []string
 		if err := OutputTXT.Validate(); err != nil {
-			errors = append(errors, "output: "+err.Error())
+			errs = append(errs, "output: "+err.Error())
 		}
 		if err := MelodyTrackTXT.Validate(); err != nil {
-			errors = append(errors, "melody tracks: "+err.Error())
+			errs = append(errs, "melody tracks: "+err.Error())
 		}
 		if err := ArtTrackTXT.Validate(); err != nil {
-			errors = append(errors, "art tracks: "+err.Error())
+			errs = append(errs, "art tracks: "+err.Error())
 		}
 		if PPQTXT.Selected == "" {
-			errors = append(errors, "ppq: cannot be empty")
+			errs = append(errs, "ppq: cannot be empty")
 		}
 		if err := BPMTXT.Validate(); err != nil {
-			errors = append(errors, "bpm: "+err.Error())
+			errs = append(errs, "bpm: "+err.Error())
 		}
 
-		if len(errors) > 0 {
-			dialog.ShowInformation("Invalid Options", strings.Join(errors, "\n"), window)
+		if len(errs) > 0 {
+			dialog.ShowInformation("Invalid Options", strings.Join(errs, "\n"), window)
 		} else {
+			logf("starting creation | blocked ui")
+			var startTime time.Time
+
+			if a.Preferences().BoolWithFallback("timer", false) {
+				logf("timer enabled, starting timer now")
+				startTime = time.Now()
+			}
+
 			OutputBox.SetText("")
 
 			melody, err := strconv.Atoi(MelodyTrackTXT.Text)
@@ -182,27 +175,80 @@ func createGUI() {
 			handleErr(err)
 
 			MelodyTrackTXT.Disable()
-
 			ArtTrackTXT.Disable()
 			OutputTXT.Disable()
 			PPQTXT.Disable()
 			BPMTXT.Disable()
 			DrumsChk.Disable()
-			InputTXT.Disable()
-			inputButton.Disable()
 			outputButton.Disable()
+
 			window.SetTitle("Empty Track Creator (Running...)")
 
-			createTracks(
-				Info{
-					melodyTracks: melody,
-					artTracks:    art,
-					midiPath:     OutputTXT.Text,
-					ppq:          pqq,
-					bpm:          bpm,
-					allowDrums:   DrumsChk.Checked,
-					inputPath:    InputTXT.Text,
-					benchmark:    a.Preferences().BoolWithFallback("timer", false),
+			var trackCount int
+			filePath := OutputTXT.Text
+
+			// if the user chooses a .mid file, we read the track count from that
+
+			// check if file exists
+			if _, err := os.Stat(filePath); os.IsNotExist(err) {
+				logf("File input does not exist, continuing with new file")
+
+				trackCount = melody + art
+			} else {
+				logf("File input exists, reading track count from file")
+
+				miditrackcount, err := ReadMIDITracks(filePath, func(format string, a ...any) {
+					OutputBox.SetText(OutputBox.Text + fmt.Sprintf(format, a...) + "\n")
+				})
+				if err != nil {
+					logf("Error reading track count from file: %s | unblocking ui", err.Error())
+
+					dialog.ShowError(err, window)
+
+					MelodyTrackTXT.Enable()
+					ArtTrackTXT.Enable()
+					OutputTXT.Enable()
+					PPQTXT.Enable()
+					BPMTXT.Enable()
+					DrumsChk.Enable()
+					outputButton.Enable()
+					window.SetTitle("Empty Track Creator")
+					return
+				} else {
+					trackCount = miditrackcount + melody + art
+				}
+			}
+
+			if trackCount > 65535 {
+				logf("Track count would be too high (%d > 65535) | unblocking ui", trackCount)
+
+				dialog.ShowError(fmt.Errorf("track count is too high (%d > 65535)", trackCount), window)
+
+				MelodyTrackTXT.Enable()
+				ArtTrackTXT.Enable()
+				OutputTXT.Enable()
+				PPQTXT.Enable()
+				BPMTXT.Enable()
+				DrumsChk.Enable()
+				outputButton.Enable()
+				window.SetTitle("Empty Track Creator")
+
+				return
+			} else {
+				logf("creating %v", melody+art)
+				tracks := createTracks(melody, art, DrumsChk.Checked, func(format string, a ...any) {
+					OutputBox.SetText(OutputBox.Text + fmt.Sprintf(format, a...) + "\n")
+				})
+				logf("created tracks")
+
+				logf("writing to %v", filePath)
+				WriteMIDI(MIDIInfo{
+					tracks:     tracks,
+					trackCount: trackCount,
+					midiPath:   filePath,
+					ppq:        pqq,
+					bpm:        bpm,
+					allowDrums: DrumsChk.Checked,
 					logger: func(format string, a ...any) {
 						OutputBox.SetText(OutputBox.Text + fmt.Sprintf(format, a...) + "\n")
 					},
@@ -213,18 +259,21 @@ func createGUI() {
 						PPQTXT.Enable()
 						BPMTXT.Enable()
 						DrumsChk.Enable()
-						InputTXT.Enable()
-						inputButton.Enable()
 						outputButton.Enable()
 						window.SetTitle("Empty Track Creator")
 					},
-				},
-			)
+				})
+				logf("wrote to %v | unblocking ui", filePath)
+
+				if a.Preferences().BoolWithFallback("timer", false) {
+					logf("timer enabled, stopping timer now | took %v", time.Since(startTime))
+					OutputBox.SetText(OutputBox.Text + fmt.Sprintf("took %v", time.Since(startTime)) + "\n")
+				}
+			}
 		}
 	})
 
 	// set default values
-	InputTXT.SetText(a.Preferences().StringWithFallback("inputPath", ""))
 	OutputTXT.SetText(a.Preferences().StringWithFallback("outputPath", "output.mid"))
 	MelodyTrackTXT.SetText(a.Preferences().StringWithFallback("melodyTracks", "8"))
 	ArtTrackTXT.SetText(a.Preferences().StringWithFallback("artTracks", "8"))
@@ -233,14 +282,6 @@ func createGUI() {
 	DrumsChk.SetChecked(a.Preferences().BoolWithFallback("allowDrums", false))
 
 	// make rows
-	inputRow := container.New(
-		layout.NewFormLayout(),
-		container.New(
-			layout.NewHBoxLayout(),
-			inputButton,
-		),
-		InputTXT,
-	)
 	outputRow := container.New(
 		layout.NewFormLayout(),
 		container.New(
@@ -266,7 +307,6 @@ func createGUI() {
 	content := container.NewBorder(
 		container.New(
 			layout.NewVBoxLayout(),
-			inputRow,
 			outputRow,
 			tracksRow,
 			midiRow,
@@ -300,7 +340,6 @@ func createGUI() {
 			BPMTXT.SetText("output.mid")
 		}
 
-		a.Preferences().SetString("inputPath", InputTXT.Text)
 		a.Preferences().SetString("outputPath", OutputTXT.Text)
 		a.Preferences().SetString("melodyTracks", MelodyTrackTXT.Text)
 		a.Preferences().SetString("artTracks", ArtTrackTXT.Text)

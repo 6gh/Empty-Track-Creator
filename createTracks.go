@@ -1,118 +1,74 @@
 package main
 
-import (
-	"os"
-	"time"
+func createTracks(melody int, art int, allowDrums bool, logger func(format string, a ...any)) []byte {
+	var tracksData []byte
 
-	"gitlab.com/gomidi/midi/gm"
-	"gitlab.com/gomidi/midi/v2"
-	"gitlab.com/gomidi/midi/v2/smf"
-)
-
-func createTracks(options Info) {
-	log := options.logger
-	var newMidi bool
-	if options.inputPath == "" {
-		newMidi = true
-	} else {
-		newMidi = false
+	if melody == 0 && art == 0 {
+		logf("no tracks to create | dont know how this happened since there are checks in place to prevent this. please report")
+		logger("no tracks to create")
+		return tracksData
 	}
 
-	log("Creating midi file at: %v", options.midiPath)
-	if newMidi {
-		log("melody tracks: %v | art tracks: %v | ppq: %v | bpm: %v | allow drums: %v", options.melodyTracks, options.artTracks, options.ppq, options.bpm, options.allowDrums)
-	} else {
-		log("using bpm+ppq from input file | melody tracks: %v | art tracks: %v | allow drums: %v", options.melodyTracks, options.artTracks, options.allowDrums)
-	}
-
-	var (
-		resolution = smf.MetricTicks(options.ppq)
-		firstTrack smf.Track
-		midiData   *smf.SMF
-		start      time.Time
-	)
-
-	if options.benchmark {
-		log("benchmark enabled, starting timer now")
-		start = time.Now()
-	}
-
-	if options.inputPath != "" {
-		var err error
-
-		log("reading from input file: %v", options.inputPath)
-		midiData, err = smf.ReadFile(options.inputPath)
-		handleErr(err)
-	} else {
-		midiData = smf.New()
-	}
-
-	if newMidi {
-		midiData.TimeFormat = resolution
-
-		firstTrack.Add(0, smf.MetaTrackSequenceName(""))
-		firstTrack.Add(0, smf.MetaTempo(float64(options.bpm)))
-		firstTrack.Close(0)
-		midiData.Add(firstTrack)
-	}
-
-	for i := 0; i < options.melodyTracks; i++ {
-		var track smf.Track
+	for i := 0; i < melody; i++ {
+		var track []byte
 
 		j := i % 15
-		if !options.allowDrums && j == 9 {
-			options.melodyTracks = options.melodyTracks + 1
+		if !allowDrums && j == 9 {
+			logf("[m-%v] skipping drum channel as j is %v", i+1, j)
+			logger("[M] skipping drum channel")
+			melody = melody + 1
 			continue
 		} else {
-			log("[M-%v] adding melody track on channel %v", i+1, j+1)
-			if j == 9 {
-				track.Add(0, smf.MetaTrackSequenceName("Rhythm"))
-			}
-			track.Add(0, midi.ProgramChange(uint8(j), gm.Instr_AcousticGrandPiano.Value()))
-			track.Close(0)
-			err := midiData.Add(track)
-			handleErr(err)
+			logf("[m-%v] adding track on channel %v", i+1, j)
+			logger("[M-%v] adding melody track on channel %v", i+1, j+1)
+			createTrack(j, &track)
+
+			tracksData = append(tracksData, track...)
 		}
 	}
 
-	for i := 0; i < options.artTracks; i++ {
-		var track smf.Track
+	for i := 0; i < art; i++ {
+		var track []byte
 
-		log("[A-%v] adding art track", i+1)
-		track.Add(0, midi.ProgramChange(15, gm.Instr_AcousticGrandPiano.Value()))
-		track.Close(0)
-		err := midiData.Add(track)
-		handleErr(err)
+		logf("[a-%v] adding art track on channel 16", i+1)
+		logger("[A-%v] adding art track", i+1)
+		createTrack(15, &track)
+
+		tracksData = append(tracksData, track...)
 	}
 
-	file, err := os.OpenFile(options.midiPath, os.O_CREATE|os.O_WRONLY, 0644)
-	handleErr(err)
-
-	_, err = midiData.WriteTo(file)
-	handleErr(err)
-	err = file.Close()
-	handleErr(err)
-
-	if options.benchmark {
-		elapsed := time.Since(start)
-		log("finished | took %s", elapsed)
-	} else {
-		log("finished")
-	}
-
-	callback := options.callback
-	callback()
+	return tracksData
 }
 
-type Info struct {
-	melodyTracks int
-	artTracks    int
-	midiPath     string
-	ppq          int
-	bpm          int
-	allowDrums   bool
-	inputPath    string
-	benchmark    bool
-	logger       func(format string, a ...any)
-	callback     func()
+func createTrack(j int, bytes *[]byte) {
+	trackType := []byte{0x4d, 0x54, 0x72, 0x6b} // MTrk
+	trackLength := make([]byte, 4)              // size of track
+	var trackEvents []byte                      // events in track
+
+	// 0 ticks, ff, 03, 00
+	// ff 03 is track name event
+	// this sets the track name to nothing
+	trackEvents = append(trackEvents, []byte{0x00, 0xff, 0x03, 0x00}...)
+
+	// 0 ticks, cn, pp
+	// cn pp is program change event
+	// n is channel number, pp is program number
+	// this sets the instrument to piano
+	// it also sets the channel for the track
+	trackEvents = append(trackEvents, []byte{0x00, byte(192 + j), 0x00}...)
+
+	// 0 ticks, ff, 2f, 00
+	// ff 2f is end of track event
+	trackEvents = append(trackEvents, []byte{0x00, 0xff, 0x2f, 0x00}...)
+
+	// update track length
+	trackLength[0] = byte(len(trackEvents) >> 24)
+	trackLength[1] = byte(len(trackEvents) >> 16)
+	trackLength[2] = byte(len(trackEvents) >> 8)
+	trackLength[3] = byte(len(trackEvents))
+
+	trackBytes := append(trackType, trackLength...)
+	trackBytes = append(trackBytes, trackEvents...)
+
+	*bytes = append(*bytes, trackBytes...)
 }
