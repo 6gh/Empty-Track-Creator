@@ -129,12 +129,13 @@ func writeNewMidi(info MIDIInfo) error {
 
 	// write conductor track
 	conductorType := []byte("MTrk")
-	conductorSize := make([]byte, 4)
+	// conductorSize := make([]byte, 4) NOTE: This is just a reference. do not uncomment this line. just showing you how many bytes it would be. check Line 146 for the actual assignment
 	var conductorData []byte
 
 	// write tempo change
 	tempoChange := []byte{0x00, 0xFF, 0x51, 0x03}  // delta time, meta event, set tempo, 3 bytes
 	tempo := NumberToBytes(60_000_000/info.bpm, 3) // 60_000_000 is the number of microseconds per minute
+	println("tempo: ", tempo, " (60_000_000/", info.bpm, ")")
 	tempoChange = append(tempoChange, tempo...)
 
 	// write end of track
@@ -143,7 +144,7 @@ func writeNewMidi(info MIDIInfo) error {
 	// write to data
 	conductorData = append(conductorData, tempoChange...)
 	conductorData = append(conductorData, endOfTrack...)
-	conductorSize = NumberToBytes(len(conductorData), 4)
+	conductorSize := NumberToBytes(len(conductorData), 4)
 
 	conductor := append(conductorType, conductorSize...)
 	conductor = append(conductor, conductorData...)

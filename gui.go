@@ -110,10 +110,10 @@ func createGUI() {
 		}
 		return nil
 	}
-	MelodyTrackTXT := createNumberInput(0, 500)
-	ArtTrackTXT := createNumberInput(0, 500)
+	MelodyTrackTXT := createNumberInput(0, 65535)
+	ArtTrackTXT := createNumberInput(0, 65535)
 	PPQTXT := widget.NewSelect([]string{"96", "192", "240", "480", "960", "1920", "3840", "8192"}, func(string) {})
-	BPMTXT := createNumberInput(0, 600)
+	BPMTXT := createNumberInput(0, 65535)
 	DrumsChk := widget.NewCheck("Allow Drums channel?", func(bool) {})
 
 	OutputBox := widget.NewMultiLineEntry()
@@ -176,7 +176,7 @@ func createGUI() {
 			handleErr(err)
 			pqq, err := strconv.Atoi(PPQTXT.Selected)
 			handleErr(err)
-			bpm, err := strconv.Atoi(MelodyTrackTXT.Text)
+			bpm, err := strconv.Atoi(BPMTXT.Text)
 			handleErr(err)
 
 			MelodyTrackTXT.Disable()
