@@ -1,40 +1,76 @@
 package main
 
-func createTracks(melody int, art int, allowDrums bool, logger func(format string, a ...any)) []byte {
+func createTracks(melody int, art int, allowDrums bool, melodyTrackRange []int, artTrackRange []int, logger func(format string, a ...any)) []byte {
 	var tracksData []byte
 
 	if melody == 0 && art == 0 {
 		logf("no tracks to create | dont know how this happened since there are checks in place to prevent this. please report")
-		logger("no tracks to create")
+		logger("no tracks to create | dont know how this happened since there are checks in place to prevent this. please report")
 		return tracksData
 	}
+
+	min := melodyTrackRange[0]
+	max := melodyTrackRange[1]
+	currentTrack := min - 1
+
+	logf("creating %v melody tracks and %v art tracks", melody, art)
+	logf("melody track range: %v-%v", min, max)
 
 	for i := 0; i < melody; i++ {
 		var track []byte
 
-		j := i % 15
-		if !allowDrums && j == 9 {
-			logf("[m-%v] skipping drum channel as j is %v", i+1, j)
+		currentTrack = currentTrack + 1
+		if currentTrack < min {
+			currentTrack = min
+		}
+		if currentTrack > max {
+			currentTrack = min
+		}
+
+		if !allowDrums && currentTrack == 10 {
+			logf("[m-%v] skipping drum channel as currentTrack is %v", i+1, currentTrack)
 			logger("[M] skipping drum channel")
 			melody = melody + 1
 			continue
 		} else {
-			logf("[m-%v] adding track on channel %v", i+1, j)
-			logger("[M-%v] adding melody track on channel %v", i+1, j+1)
-			createTrack(j, &track)
+			logf("[m-%v] adding track on channel %v", i+1, currentTrack)
+			logger("[M-%v] adding melody track on channel %v", i+1, currentTrack)
+			createTrack(currentTrack-1, &track)
 
 			tracksData = append(tracksData, track...)
 		}
 	}
 
+	logf("art track range: %v-%v", artTrackRange[0], artTrackRange[1])
+
+	min = artTrackRange[0]
+	max = artTrackRange[1]
+	currentTrack = min - 1
+
 	for i := 0; i < art; i++ {
 		var track []byte
 
-		logf("[a-%v] adding art track on channel 16", i+1)
-		logger("[A-%v] adding art track", i+1)
-		createTrack(15, &track)
+		currentTrack = currentTrack + 1
+		if currentTrack < min {
+			currentTrack = min
+		}
+		if currentTrack > max {
+			currentTrack = min
+		}
 
-		tracksData = append(tracksData, track...)
+		if !allowDrums && currentTrack == 10 {
+			logf("[a-%v] skipping drum channel as currentTrack is %v", i+1, currentTrack)
+			logger("[A] skipping drum channel")
+			art = art + 1
+			continue
+		} else {
+			logf("[a-%v] adding track on channel %v", i+1, currentTrack)
+			logger("[A-%v] adding art track on channel %v", i+1, currentTrack)
+			createTrack(currentTrack-1, &track)
+
+			tracksData = append(tracksData, track...)
+		}
+
 	}
 
 	return tracksData

@@ -83,14 +83,111 @@ func createGUI() {
 			title.Alignment = fyne.TextAlignCenter
 			title.TextSize = 24
 
-			timerChkBox := widget.NewCheck("Enable Timer (shows how much time the program took)", func(checked bool) {
-				a.Preferences().SetBool("timer", checked)
-			})
-			timerChkBox.SetChecked(a.Preferences().BoolWithFallback("timer", false))
+			drumsChk := widget.NewCheck("Allow Drums channel?", func(bool) {})
 
-			vBox := container.New(layout.NewVBoxLayout(), title, timerChkBox)
+			melodyTracksRange := widget.NewEntry()
+			melodyTracksRange.Validator = func(s string) error {
+				if s == "" {
+					return errors.New("range cannot be empty")
+				}
+				if !strings.Contains(s, "-") {
+					return errors.New("range must be in the format of <min>-<max>")
+				}
 
-			dialog.ShowCustom("Settings", "Close", vBox, window)
+				split := strings.Split(s, "-")
+				if len(split) != 2 {
+					return errors.New("range must be in the format of <min>-<max>")
+				}
+
+				min, err := strconv.Atoi(split[0])
+				if err != nil {
+					return errors.New("min is not a number")
+				}
+
+				max, err := strconv.Atoi(split[1])
+				if err != nil {
+					return errors.New("max is not a number")
+				}
+
+				if max > 16 {
+					return errors.New("max cannot be greater than 16")
+				}
+				if min < 1 {
+					return errors.New("min cannot be less than 1")
+				}
+
+				if min > max {
+					return errors.New("min cannot be greater than max")
+				}
+
+				return nil
+			}
+			artTrackRange := widget.NewEntry()
+			artTrackRange.Validator = func(s string) error {
+				if s == "" {
+					return errors.New("range cannot be empty")
+				}
+				if !strings.Contains(s, "-") {
+					return errors.New("range must be in the format of <min>-<max>")
+				}
+
+				split := strings.Split(s, "-")
+				if len(split) != 2 {
+					return errors.New("range must be in the format of <min>-<max>")
+				}
+
+				min, err := strconv.Atoi(split[0])
+				if err != nil {
+					return errors.New("min is not a number")
+				}
+
+				max, err := strconv.Atoi(split[1])
+				if err != nil {
+					return errors.New("max is not a number")
+				}
+
+				if max > 16 {
+					return errors.New("max cannot be greater than 16")
+				}
+				if min < 1 {
+					return errors.New("min cannot be less than 1")
+				}
+
+				if min > max {
+					return errors.New("min cannot be greater than max")
+				}
+
+				return nil
+			}
+
+			melodyTracksRange.SetText(a.Preferences().StringWithFallback("melodyTracksRange", "1-15"))
+			artTrackRange.SetText(a.Preferences().StringWithFallback("artTracksRange", "16-16"))
+			drumsChk.Checked = a.Preferences().BoolWithFallback("allowDrums", false)
+
+			dialog.ShowForm("Settings", "Save", "Cancel", []*widget.FormItem{
+				{
+					Text:     "Melody Tracks Range",
+					Widget:   melodyTracksRange,
+					HintText: "The range of channels to create melody tracks on",
+				},
+				{
+					Text:     "Art Tracks Range",
+					Widget:   artTrackRange,
+					HintText: "The range of channels to create art tracks on",
+				},
+				{
+					Text:     "CH-10",
+					Widget:   drumsChk,
+					HintText: "If unchecked, channel 10 will be skipped",
+				},
+			}, func(b bool) {
+				if b {
+					a.Preferences().SetString("melodyTracksRange", melodyTracksRange.Text)
+					a.Preferences().SetString("artTracksRange", artTrackRange.Text)
+					a.Preferences().SetBool("allowDrums", drumsChk.Checked)
+					logf("Settings closed and saved")
+				}
+			}, window)
 		}),
 	)
 
@@ -114,7 +211,6 @@ func createGUI() {
 	ArtTrackTXT := createNumberInput(0, 65535)
 	PPQTXT := widget.NewSelect([]string{"96", "192", "240", "480", "960", "1920", "3840", "8192"}, func(string) {})
 	BPMTXT := createNumberInput(0, 65535)
-	DrumsChk := widget.NewCheck("Allow Drums channel?", func(bool) {})
 
 	OutputBox := widget.NewMultiLineEntry()
 	OutputBox.SetText("Output will go here...")
@@ -163,10 +259,8 @@ func createGUI() {
 			logf("starting creation | blocked ui")
 			var startTime time.Time
 
-			if a.Preferences().BoolWithFallback("timer", false) {
-				logf("timer enabled, starting timer now")
-				startTime = time.Now()
-			}
+			logf("timer enabled, starting timer now")
+			startTime = time.Now()
 
 			OutputBox.SetText("")
 
@@ -179,12 +273,29 @@ func createGUI() {
 			bpm, err := strconv.Atoi(BPMTXT.Text)
 			handleErr(err)
 
+			melodyTrackRangeSTR := a.Preferences().StringWithFallback("melodyTracksRange", "1-15")
+			split := strings.Split(melodyTrackRangeSTR, "-")
+			min, err := strconv.Atoi(split[0])
+			handleErr(err)
+			max, err := strconv.Atoi(split[1])
+			handleErr(err)
+			melodyTrackRange := []int{min, max}
+
+			artTrackRangeSTR := a.Preferences().StringWithFallback("artTracksRange", "16-16")
+			split = strings.Split(artTrackRangeSTR, "-")
+			min, err = strconv.Atoi(split[0])
+			handleErr(err)
+			max, err = strconv.Atoi(split[1])
+			handleErr(err)
+			artTrackRange := []int{min, max}
+
+			drumsEnabled := a.Preferences().BoolWithFallback("allowDrums", false)
+
 			MelodyTrackTXT.Disable()
 			ArtTrackTXT.Disable()
 			OutputTXT.Disable()
 			PPQTXT.Disable()
 			BPMTXT.Disable()
-			DrumsChk.Disable()
 			outputButton.Disable()
 
 			window.SetTitle("Empty Track Creator (Running...)")
@@ -215,7 +326,6 @@ func createGUI() {
 					OutputTXT.Enable()
 					PPQTXT.Enable()
 					BPMTXT.Enable()
-					DrumsChk.Enable()
 					outputButton.Enable()
 					window.SetTitle("Empty Track Creator")
 					return
@@ -234,14 +344,13 @@ func createGUI() {
 				OutputTXT.Enable()
 				PPQTXT.Enable()
 				BPMTXT.Enable()
-				DrumsChk.Enable()
 				outputButton.Enable()
 				window.SetTitle("Empty Track Creator")
 
 				return
 			} else {
-				logf("creating %v", melody+art)
-				tracks := createTracks(melody, art, DrumsChk.Checked, func(format string, a ...any) {
+				logf("creating %v melody + %v art = %v total tracks", melody, art, melody+art)
+				tracks := createTracks(melody, art, drumsEnabled, melodyTrackRange, artTrackRange, func(format string, a ...any) {
 					OutputBox.SetText(OutputBox.Text + fmt.Sprintf(format, a...) + "\n")
 				})
 				logf("created tracks")
@@ -253,7 +362,7 @@ func createGUI() {
 					midiPath:   filePath,
 					ppq:        pqq,
 					bpm:        bpm,
-					allowDrums: DrumsChk.Checked,
+					allowDrums: drumsEnabled,
 					logger: func(format string, a ...any) {
 						OutputBox.SetText(OutputBox.Text + fmt.Sprintf(format, a...) + "\n")
 					},
@@ -263,17 +372,14 @@ func createGUI() {
 						OutputTXT.Enable()
 						PPQTXT.Enable()
 						BPMTXT.Enable()
-						DrumsChk.Enable()
 						outputButton.Enable()
 						window.SetTitle("Empty Track Creator")
 					},
 				})
 				logf("wrote to %v | unblocking ui", filePath)
 
-				if a.Preferences().BoolWithFallback("timer", false) {
-					logf("timer enabled, stopping timer now | took %v", time.Since(startTime))
-					OutputBox.SetText(OutputBox.Text + fmt.Sprintf("took %v", time.Since(startTime)) + "\n")
-				}
+				logf("timer enabled, stopping timer now | took %v", time.Since(startTime))
+				OutputBox.SetText(OutputBox.Text + fmt.Sprintf("took %v", time.Since(startTime)) + "\n")
 			}
 		}
 	})
@@ -284,7 +390,6 @@ func createGUI() {
 	ArtTrackTXT.SetText(a.Preferences().StringWithFallback("artTracks", "8"))
 	PPQTXT.SetSelected(a.Preferences().StringWithFallback("ppq", "960"))
 	BPMTXT.SetText(a.Preferences().StringWithFallback("bpm", "138"))
-	DrumsChk.SetChecked(a.Preferences().BoolWithFallback("allowDrums", false))
 
 	// make rows
 	outputRow := container.New(
@@ -302,7 +407,6 @@ func createGUI() {
 		container.New(layout.NewFormLayout(), PPQLbl, PPQTXT),
 		container.New(layout.NewFormLayout(), BPMLbl, BPMTXT),
 	)
-	drumRow := container.New(layout.NewHBoxLayout(), DrumsChk)
 	bottomRow := container.New(
 		layout.NewMaxLayout(),
 		OutputBox,
@@ -315,7 +419,6 @@ func createGUI() {
 			outputRow,
 			tracksRow,
 			midiRow,
-			drumRow,
 			createButton,
 		),
 		helpBar,
@@ -350,7 +453,6 @@ func createGUI() {
 		a.Preferences().SetString("artTracks", ArtTrackTXT.Text)
 		a.Preferences().SetString("ppq", PPQTXT.Selected)
 		a.Preferences().SetString("bpm", BPMTXT.Text)
-		a.Preferences().SetBool("allowDrums", DrumsChk.Checked)
 
 		window.Close()
 	})
